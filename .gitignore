@@ -1,0 +1,10 @@
+#Python Generated Files
+
+*.py[co]
+build/
+dist/
+wheels/
+__pycache__/
+
+#Virtual Environment
+.venv

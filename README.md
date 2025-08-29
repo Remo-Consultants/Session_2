@@ -1,11 +1,14 @@
 ## Receptive Field Calculator (Flask)
 
-A very simple Flask web app to interactively compute the cumulative receptive field (RF) and effective stride (“jump”) of a CNN as you add layers (Conv2D and MaxPool2D).
+A very simple Flask web app to interactively compute the cumulative receptive field (RF), effective stride, spatial sizes, and channels of a CNN as you add layers (Conv2D and MaxPool2D). Includes a 3-panel visualization showing how a kernel reads the input to produce outputs.
 
 ### What it does
 - Add layers one by one (Conv2D or MaxPool2D).
-- Shows cumulative RF size and effective stride after each layer.
-- You can remove the last layer or reset all.
+- Shows cumulative RF, effective stride, output sizes, and channels.
+- New: Visualize up to the first 3 layers with:
+  - Input grid (numbers)
+  - Kernel window at a chosen output position
+  - Output grid with highlighted cell
 
 ---
 
@@ -33,23 +36,26 @@ Open `http://127.0.0.1:5000` in your browser.
 
 1) Go to `http://127.0.0.1:5000`.
 
-2) In the form:
-- Select a layer type: `Conv2D` or `MaxPool2D`.
-- Enter:
-  - `Kernel (k)` (e.g., 3)
-  - `Stride (s)` (e.g., 1 or 2)
-  - `Padding (p)` (kept for completeness; doesn’t change RF size)
-  - `Dilation (d)` (Conv2D only)
+2) Set input image shape (H, W, C) at the top and click “Set Input”.
 
-3) Click “Add Layer”.
+3) In “Add Layer”:
+- Select `Conv2D` or `MaxPool2D`.
+- Enter `Kernel (k)`, `Stride (s)`, `Padding (p)`, and (for Conv2D) `Dilation (d)` and optional `Out Channels`.
 
-4) The table shows each layer and the cumulative:
-- RF size (how many input pixels influence one output position)
-- Effective stride (“jump”) at that layer
+4) Click “Add Layer”. The table updates with RF, effective stride, and output sizes.
 
-5) Use:
-- “Remove Last Layer” to undo the most recent addition
-- “Reset All” to clear all layers
+5) Scroll to “3-Layer Visualizer”:
+- Choose the layer to visualize (1..3).
+- Pick an output coordinate `(Y, X)` for that layer.
+- The visualization shows:
+  - Left: The input grid to that layer (numbers).
+  - Middle: The kernel window (cells used to compute the selected output cell). Dilation/stride/padding are all reflected.
+  - Right: The output grid; your selected `(Y, X)` cell is highlighted.
+
+Notes:
+- The visual uses a small single-channel preview (max 8×8) with unit conv weights to keep it readable.
+- For `MaxPool2D`, the output cell is the max of the highlighted input patch.
+- For `Conv2D`, the output cell is the sum of the highlighted input patch (unit weights).
 
 ---
 
@@ -66,24 +72,6 @@ For a layer with kernel \(k\), stride \(s\), dilation \(d\):
 Notes:
 - Padding does not change the RF size (it affects alignment only).
 - For `MaxPool2D`, dilation is effectively 1.
-
----
-
-## Examples
-
-- Add `Conv2D(k=3, s=1, d=1)`:
-  - RF: 3, jump: 1
-- Then add `MaxPool2D(k=2, s=2)`:
-  - RF: 4, jump: 2
-- Then add `Conv2D(k=3, s=1, d=1)`:
-  - RF: 8, jump: 2
-
----
-
-## Project Files
-
-- `class_code/main.py`: Flask app (routes and RF logic).
-- `class_code/templates/index.html`: The UI template.
 
 ---
 
@@ -104,23 +92,8 @@ Notes:
 
 ---
 
-## Optional: Virtual Environment Tips
+## Next Steps (Ideas)
 
-```bash
-# Create venv
-python -m venv .venv
-
-# Activate (PowerShell)
-.\.venv\Scripts\activate
-
-# Deactivate
-deactivate
-```
-
----
-
-## Next Steps (Easy Extensions)
-
-- Show output feature map size given an input size.
-- Add average pooling and general padding effects on alignment.
-- Export/import the layer list as JSON.
+- Allow choosing kernel weights and show weighted sum.
+- Animate the kernel sweeping across the feature map.
+- Show multi-channel overlays (sum across input channels).

@@ -5,96 +5,265 @@
   <meta charset="utf-8">
   <title>Receptive Field Calculator</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    h1 { margin-bottom: 8px; }
-    form, table { margin-top: 16px; }
-    table { border-collapse: collapse; width: 100%; max-width: 900px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f2f2f2; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; }
-    .row > div { display: flex; flex-direction: column; }
-    .actions { margin-top: 8px; display: flex; gap: 8px; }
-    input[type="number"], select { padding: 6px; min-width: 100px; }
-    button { padding: 8px 12px; cursor: pointer; }
+    :root {
+      --bg: #ffffff;
+      --fg: #111111;
+      --muted: #666666;
+      --line: #e5e7eb;
+      --accent: #2563eb;
+      --soft: #f8fafc;
+    }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; background: var(--bg); color: var(--fg); }
+    h1 { margin: 0 0 8px 0; font-weight: 600; }
+    p { color: var(--muted); margin: 0 0 16px 0; }
+    form, table, .card { margin-top: 16px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .row > div { display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 12px; color: var(--muted); }
+    input[type="number"], select {
+      padding: 8px 10px; min-width: 110px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft);
+    }
+    button {
+      padding: 8px 12px; cursor: pointer; border: 1px solid var(--line); background: #fff; border-radius: 8px;
+    }
+    button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+    table { border-collapse: collapse; width: 100%; max-width: 1000px; border: 1px solid var(--line); }
+    th, td { border-top: 1px solid var(--line); padding: 8px; text-align: left; }
+    th { background: var(--soft); }
+    .actions { display: flex; gap: 8px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: #fff; }
+    .svgbox { width: 100%; height: 240px; border: 1px dashed var(--line); border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--soft); }
+    .muted { color: var(--muted); }
+    .title { font-weight: 600; margin: 0 0 8px 0; }
   </style>
 </head>
 <body>
   <h1>Receptive Field Calculator</h1>
-  <p>Add Conv2D or MaxPool2D layers. As you add them, see the cumulative receptive field (RF) and effective stride.</p>
+  <p>Add Conv2D or MaxPool2D layers. See RF, effective stride, spatial sizes, and channels.</p>
 
-  <form method="POST" action="/add">
-    <div class="row">
-      <div>
-        <label>Layer Type</label>
-        <select name="type" id="type" onchange="toggleDilation()">
-          <option value="Conv2D">Conv2D</option>
-          <option value="MaxPool2D">MaxPool2D</option>
-        </select>
+  <div class="grid">
+    <div class="card">
+      <h3 class="title">Input Image</h3>
+      <form method="POST" action="/set_input">
+        <div class="row">
+          <div>
+            <label>Height (H)</label>
+            <input type="number" name="in_h" value="{{ input_shape.h }}" min="1" required>
+          </div>
+          <div>
+            <label>Width (W)</label>
+            <input type="number" name="in_w" value="{{ input_shape.w }}" min="1" required>
+          </div>
+          <div>
+            <label>Channels (C)</label>
+            <input type="number" name="in_c" value="{{ input_shape.c }}" min="1" required>
+          </div>
+          <div>
+            <button type="submit" class="primary">Set Input</button>
+          </div>
+        </div>
+      </form>
+
+      <div class="svgbox" aria-label="feature map preview">
+        {% set maxSide = 180 %}
+        {% set h = current.h %}
+        {% set w = current.w %}
+        {% set c = current.c %}
+        {% set scale = (maxSide / (h if h > w else w)) if (h and w and (h > 0 and w > 0)) else 1 %}
+        {% set vh = (h * scale) | round(0, 'floor') %}
+        {% set vw = (w * scale) | round(0, 'floor') %}
+        <svg width="90%" height="200" viewBox="0 0 220 200" xmlns="http://www.w3.org/2000/svg" role="img">
+          <rect x="{{ (220 - vw) // 2 }}" y="{{ (200 - vh) // 2 }}" width="{{ vw }}" height="{{ vh }}" fill="#e0ecff" stroke="#2563eb" stroke-width="2" rx="6" ry="6"></rect>
+          <text x="110" y="24" text-anchor="middle" font-size="12" fill="#111">Current Feature Map</text>
+          <text x="110" y="42" text-anchor="middle" font-size="12" fill="#666">{{ h }} × {{ w }} × {{ c }}</text>
+          <text x="110" y="60" text-anchor="middle" font-size="11" fill="#666">RF grows as you add layers</text>
+        </svg>
       </div>
-      <div>
-        <label>Kernel (k)</label>
-        <input type="number" name="kernel" value="3" min="1" required>
-      </div>
-      <div>
-        <label>Stride (s)</label>
-        <input type="number" name="stride" value="1" min="1" required>
-      </div>
-      <div>
-        <label>Padding (p)</label>
-        <input type="number" name="padding" value="0" min="0" required>
-      </div>
-      <div id="dilation-group">
-        <label>Dilation (d, Conv only)</label>
-        <input type="number" name="dilation" value="1" min="1" required>
+      <div class="muted" style="margin-top:8px;">Note: The rectangle scales to the larger of H or W. Channels shown as text.</div>
+    </div>
+
+    <div class="card">
+      <h3 class="title">Add Layer</h3>
+      <form method="POST" action="/add">
+        <div class="row">
+          <div>
+            <label>Layer Type</label>
+            <select name="type" id="type" onchange="toggleDilation(); toggleOutC();">
+              <option value="Conv2D">Conv2D</option>
+              <option value="MaxPool2D">MaxPool2D</option>
+            </select>
+          </div>
+          <div>
+            <label>Kernel (k)</label>
+            <input type="number" name="kernel" value="3" min="1" required>
+          </div>
+          <div>
+            <label>Stride (s)</label>
+            <input type="number" name="stride" value="1" min="1" required>
+          </div>
+          <div>
+            <label>Padding (p)</label>
+            <input type="number" name="padding" value="0" min="0" required>
+          </div>
+          <div id="dilation-group">
+            <label>Dilation (d, Conv only)</label>
+            <input type="number" name="dilation" value="1" min="1" required>
+          </div>
+          <div id="outc-group">
+            <label>Out Channels (Conv only)</label>
+            <input type="number" name="out_channels" placeholder="defaults to previous C" min="1">
+          </div>
+        </div>
+        <div class="actions" style="margin-top:8px;">
+          <button type="submit" class="primary">Add Layer</button>
+        </div>
+      </form>
+
+      <div class="actions" style="margin-top:12px;">
+        <form method="POST" action="/pop">
+          <button type="submit">Remove Last Layer</button>
+        </form>
+        <form method="POST" action="/reset">
+          <button type="submit">Reset All</button>
+        </form>
       </div>
     </div>
-    <div class="actions">
-      <button type="submit">Add Layer</button>
-    </div>
-  </form>
-
-  <div class="actions">
-    <form method="POST" action="/pop">
-      <button type="submit">Remove Last Layer</button>
-    </form>
-    <form method="POST" action="/reset">
-      <button type="submit">Reset All</button>
-    </form>
   </div>
 
-  <h2>Layers & Receptive Field</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Type</th>
-        <th>k</th>
-        <th>s</th>
-        <th>p</th>
-        <th>d</th>
-        <th>RF size</th>
-        <th>Effective stride</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if computed and computed|length > 0 %}
-        {% for row in computed %}
-          <tr>
-            <td>{{ row.index }}</td>
-            <td>{{ row.type }}</td>
-            <td>{{ row.kernel }}</td>
-            <td>{{ row.stride }}</td>
-            <td>{{ row.padding }}</td>
-            <td>{{ row.dilation }}</td>
-            <td>{{ row.rf }}</td>
-            <td>{{ row.jump }}</td>
-          </tr>
-        {% endfor %}
-      {% else %}
-        <tr><td colspan="8">No layers added yet. RF starts at 1, effective stride at 1.</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
+  <div class="card">
+    <h3 class="title">Layers & Receptive Field</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Type</th>
+          <th>k</th>
+          <th>s</th>
+          <th>p</th>
+          <th>d</th>
+          <th>RF size</th>
+          <th>Effective stride</th>
+          <th>H_out</th>
+          <th>W_out</th>
+          <th>Out C</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if computed and computed|length > 0 %}
+          {% for row in computed %}
+            <tr>
+              <td>{{ row.index }}</td>
+              <td>{{ row.type }}</td>
+              <td>{{ row.kernel }}</td>
+              <td>{{ row.stride }}</td>
+              <td>{{ row.padding }}</td>
+              <td>{{ row.dilation }}</td>
+              <td>{{ row.rf }}</td>
+              <td>{{ row.jump }}</td>
+              <td>{{ row.h }}</td>
+              <td>{{ row.w }}</td>
+              <td>{{ row.out_channels }}</td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="11">No layers added yet. RF starts at 1, stride at 1. Current: {{ input_shape.h }} × {{ input_shape.w }} × {{ input_shape.c }}.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3 class="title">3-Layer Visualizer</h3>
+    {% set L = viz_layers|length %}
+    {% if L == 0 %}
+      <div class="muted">Add at least one layer to visualize.</div>
+    {% else %}
+      <form method="GET" action="/" style="margin-bottom:12px;">
+        <div class="row">
+          <div>
+            <label>Layer to visualize (1..{{ [3, L]|min }})</label>
+            <input type="number" name="viz_layer" value="{{ viz_layer }}" min="1" max="{{ [3, L]|min }}">
+          </div>
+          <div>
+            <label>Output Y (0..{{ oy_max }})</label>
+            <input type="number" name="oy" value="{{ oy }}" min="0" max="{{ oy_max }}">
+          </div>
+          <div>
+            <label>Output X (0..{{ ox_max }})</label>
+            <input type="number" name="ox" value="{{ ox }}" min="0" max="{{ ox_max }}">
+          </div>
+          <div style="align-self:flex-end;">
+            <button type="submit">Update</button>
+          </div>
+        </div>
+      </form>
+
+      {% set sel = viz_layers[viz_layer - 1] %}
+      <div class="grid3">
+        <!-- Input grid -->
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Layer {{ viz_layer }} input</div>
+          <svg width="100%" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+            {% set ih = sel['in']|length %}
+            {% set iw = sel['in'][0]|length if ih>0 else 0 %}
+            {% set cell = 200 / (ih if ih>iw else iw) %}
+            {% for r in range(ih) %}
+              {% for c in range(iw) %}
+                {% set x = 10 + c*cell %}
+                {% set y = 10 + r*cell %}
+                <rect x="{{ x }}" y="{{ y }}" width="{{ cell-2 }}" height="{{ cell-2 }}" fill="#fff" stroke="#ddd"></rect>
+                <text x="{{ x + (cell-2)/2 }}" y="{{ y + (cell-2)/2 + 4 }}" text-anchor="middle" font-size="10" fill="#333">{{ sel['in'][r][c] }}</text>
+              {% endfor %}
+            {% endfor %}
+          </svg>
+        </div>
+
+        <!-- Kernel overlay at selected position -->
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Kernel window ({{ sel.k }}×{{ sel.k }}, s={{ sel.s }}, p={{ sel.p }}, d={{ sel.d }})</div>
+          <svg width="100%" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+            {% set ih = sel['in']|length %}
+            {% set iw = sel['in'][0]|length if ih>0 else 0 %}
+            {% set cell = 200 / (ih if ih>iw else iw) %}
+            {% set base_r = oy * sel.s %}
+            {% set base_c = ox * sel.s %}
+            {% for r in range(ih) %}
+              {% for c in range(iw) %}
+                {% set x = 10 + c*cell %}
+                {% set y = 10 + r*cell %}
+                {% set in_kernel = (r >= base_r) and (c >= base_c) and (r <= base_r + (sel.k-1)*sel.d) and (c <= base_c + (sel.k-1)*sel.d) and ((r-base_r) % sel.d == 0) and ((c-base_c) % sel.d == 0) %}
+                <rect x="{{ x }}" y="{{ y }}" width="{{ cell-2 }}" height="{{ cell-2 }}" fill="{{ '#e0ecff' if in_kernel else '#fff' }}" stroke="{{ '#2563eb' if in_kernel else '#ddd' }}" stroke-width="{{ '2' if in_kernel else '1' }}"></rect>
+                <text x="{{ x + (cell-2)/2 }}" y="{{ y + (cell-2)/2 + 4 }}" text-anchor="middle" font-size="10" fill="#333">{{ sel['in'][r][c] }}</text>
+              {% endfor %}
+            {% endfor %}
+            <text x="110" y="210" text-anchor="middle" font-size="11" fill="#666">Highlighted cells are read by the kernel for output ({{ oy }}, {{ ox }})</text>
+          </svg>
+        </div>
+
+        <!-- Output grid with highlighted cell -->
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Layer {{ viz_layer }} output</div>
+          <svg width="100%" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+            {% set oh = sel['out_h'] %}
+            {% set ow = sel['out_w'] %}
+            {% set cell = 200 / (oh if oh>ow else ow) %}
+            {% for r in range(oh) %}
+              {% for c in range(ow) %}
+                {% set x = 10 + c*cell %}
+                {% set y = 10 + r*cell %}
+                {% set hl = (r == oy and c == ox) %}
+                <rect x="{{ x }}" y="{{ y }}" width="{{ cell-2 }}" height="{{ cell-2 }}" fill="{{ '#fef3c7' if hl else '#fff' }}" stroke="{{ '#f59e0b' if hl else '#ddd' }}"></rect>
+                <text x="{{ x + (cell-2)/2 }}" y="{{ y + (cell-2)/2 + 4 }}" text-anchor="middle" font-size="10" fill="#333">{{ sel['out'][r][c] if ow>0 else 0 }}</text>
+              {% endfor %}
+            {% endfor %}
+          </svg>
+        </div>
+      </div>
+      <div class="muted" style="margin-top:8px;">The visual uses a small single-channel preview (max 8×8) with unit conv weights to keep the math clear.</div>
+    {% endif %}
+  </div>
 
   <script>
     function toggleDilation() {
@@ -102,7 +271,13 @@
       const dil = document.getElementById('dilation-group');
       dil.style.display = (type === 'Conv2D') ? 'block' : 'none';
     }
+    function toggleOutC() {
+      const type = document.getElementById('type').value;
+      const outc = document.getElementById('outc-group');
+      outc.style.display = (type === 'Conv2D') ? 'block' : 'none';
+    }
     toggleDilation();
+    toggleOutC();
   </script>
 </body>
 </html>

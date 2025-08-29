@@ -1,0 +1,108 @@
+<!-- class_code/rf_app/templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receptive Field Calculator</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    h1 { margin-bottom: 8px; }
+    form, table { margin-top: 16px; }
+    table { border-collapse: collapse; width: 100%; max-width: 900px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f2f2f2; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row > div { display: flex; flex-direction: column; }
+    .actions { margin-top: 8px; display: flex; gap: 8px; }
+    input[type="number"], select { padding: 6px; min-width: 100px; }
+    button { padding: 8px 12px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Receptive Field Calculator</h1>
+  <p>Add Conv2D or MaxPool2D layers. As you add them, see the cumulative receptive field (RF) and effective stride.</p>
+
+  <form method="POST" action="/add">
+    <div class="row">
+      <div>
+        <label>Layer Type</label>
+        <select name="type" id="type" onchange="toggleDilation()">
+          <option value="Conv2D">Conv2D</option>
+          <option value="MaxPool2D">MaxPool2D</option>
+        </select>
+      </div>
+      <div>
+        <label>Kernel (k)</label>
+        <input type="number" name="kernel" value="3" min="1" required>
+      </div>
+      <div>
+        <label>Stride (s)</label>
+        <input type="number" name="stride" value="1" min="1" required>
+      </div>
+      <div>
+        <label>Padding (p)</label>
+        <input type="number" name="padding" value="0" min="0" required>
+      </div>
+      <div id="dilation-group">
+        <label>Dilation (d, Conv only)</label>
+        <input type="number" name="dilation" value="1" min="1" required>
+      </div>
+    </div>
+    <div class="actions">
+      <button type="submit">Add Layer</button>
+    </div>
+  </form>
+
+  <div class="actions">
+    <form method="POST" action="/pop">
+      <button type="submit">Remove Last Layer</button>
+    </form>
+    <form method="POST" action="/reset">
+      <button type="submit">Reset All</button>
+    </form>
+  </div>
+
+  <h2>Layers & Receptive Field</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Type</th>
+        <th>k</th>
+        <th>s</th>
+        <th>p</th>
+        <th>d</th>
+        <th>RF size</th>
+        <th>Effective stride</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if computed and computed|length > 0 %}
+        {% for row in computed %}
+          <tr>
+            <td>{{ row.index }}</td>
+            <td>{{ row.type }}</td>
+            <td>{{ row.kernel }}</td>
+            <td>{{ row.stride }}</td>
+            <td>{{ row.padding }}</td>
+            <td>{{ row.dilation }}</td>
+            <td>{{ row.rf }}</td>
+            <td>{{ row.jump }}</td>
+          </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="8">No layers added yet. RF starts at 1, effective stride at 1.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <script>
+    function toggleDilation() {
+      const type = document.getElementById('type').value;
+      const dil = document.getElementById('dilation-group');
+      dil.style.display = (type === 'Conv2D') ? 'block' : 'none';
+    }
+    toggleDilation();
+  </script>
+</body>
+</html>
